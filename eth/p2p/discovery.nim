@@ -103,8 +103,8 @@ proc expiration(): uint32 =
 
 # Wire protocol
 
-proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) {.raises: [Defect].} =
-  let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
+proc send(d: DiscoveryProtocol, n: ENode, data: seq[byte]) {.raises: [Defect].} =
+  let ta = initTAddress(n.address.ip, n.address.udpPort)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
     if f.failed:
@@ -115,22 +115,22 @@ proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
   result = msg[0 ..< MAC_SIZE]
-  d.send(n, msg)
   trace ">>> ping ", src = d.thisNode, dst = n
+  d.send(n.node, msg)
 
 proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
   let payload = rlp.encode((n.node.address, token, expiration()))
   let msg = pack(cmdPong, payload, d.privKey)
-  d.send(n, msg)
   trace ">>> pong ", src = d.thisNode, dst = n
+  d.send(n.node, msg)
 
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
   data[32 .. ^1] = targetNodeId.toByteArrayBE()
   let payload = rlp.encode((data, expiration()))
   let msg = pack(cmdFindNode, payload, d.privKey)
-  d.send(n, msg)
   trace ">>> find_node to ", src = d.thisNode, dst = n#, ": ", msg.toHex()
+  d.send(n.node, msg)
 
 proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
@@ -143,7 +143,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
       let payload = rlp.encode((nodes, expiration()))
       let msg = pack(cmdNeighbours, payload, d.privKey)
       trace ">>> Neighbours to", src = d.thisNode, dst = node, nodes
-      d.send(node, msg)
+      d.send(node.node, msg)
       nodes.setLen(0)
 
   for i, n in neighbours:
