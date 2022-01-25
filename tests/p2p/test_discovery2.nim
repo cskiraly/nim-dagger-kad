@@ -12,7 +12,7 @@
 import
   std/sequtils,
   chronos, stew/byteutils, nimcrypto, testutils/unittests,
-  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode],
+  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode, node],
   chronicles
 
 proc localAddress(port: int): Address =
@@ -33,10 +33,6 @@ proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
     signature = @(pk.sign(payload).toRaw())
     msgHash = keccak256.digest(signature & payloadSeq)
   result = @(msgHash.data) & signature & payloadSeq
-
-proc nodeIdInNodes(id: NodeId, nodes: openArray[Node]): bool =
-  for n in nodes:
-    if id == n.id: return true
 
 procSuite "Discovery Tests":
   let
@@ -71,6 +67,6 @@ procSuite "Discovery Tests":
 
     info "---- STARTING LOOKUP ---"
 
-    let targetNodeId = kademlia.toNodeId(PrivateKey.random(rng[]).toPublicKey) 
+    let targetNodeId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
     let nodesFound = await nodes[0].kademlia.lookup(targetNodeId)
     echo "nodes found:", nodesFound.deduplicate()

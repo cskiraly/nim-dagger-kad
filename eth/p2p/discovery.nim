@@ -12,7 +12,7 @@ import
   chronos, stint, nimcrypto/keccak, chronicles, bearssl,
   stew/[objects, results],
   ".."/[keys, rlp],
-  "."/[kademlia, enode]
+  "."/[kademlia, enode, node]
 
 export
   Node, results
