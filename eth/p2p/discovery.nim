@@ -115,22 +115,22 @@ proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
   result = msg[0 ..< MAC_SIZE]
-  trace ">>> ping ", n
   d.send(n, msg)
+  trace ">>> ping ", src = d.thisNode, dst = n
 
 proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
   let payload = rlp.encode((n.node.address, token, expiration()))
   let msg = pack(cmdPong, payload, d.privKey)
-  trace ">>> pong ", n
   d.send(n, msg)
+  trace ">>> pong ", src = d.thisNode, dst = n
 
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
   data[32 .. ^1] = targetNodeId.toByteArrayBE()
   let payload = rlp.encode((data, expiration()))
   let msg = pack(cmdFindNode, payload, d.privKey)
-  trace ">>> find_node to ", n#, ": ", msg.toHex()
   d.send(n, msg)
+  trace ">>> find_node to ", src = d.thisNode, dst = n#, ": ", msg.toHex()
 
 proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
@@ -142,7 +142,7 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
     block:
       let payload = rlp.encode((nodes, expiration()))
       let msg = pack(cmdNeighbours, payload, d.privKey)
-      trace "Neighbours to", node, nodes
+      trace ">>> Neighbours to", src = d.thisNode, dst = node, nodes
       d.send(node, msg)
       nodes.setLen(0)
 
@@ -292,10 +292,11 @@ proc run(d: DiscoveryProtocol) {.async.} =
   while true:
     discard await d.lookupRandom()
     await sleepAsync(chronos.seconds(3))
-    trace "Discovered nodes", nodes = d.kademlia.nodesDiscovered
+    trace "Discovered nodes", d = d.thisNode, nodes = d.kademlia.nodesDiscovered
 
 proc bootstrap*(d: DiscoveryProtocol) {.async.} =
   await d.kademlia.bootstrap(d.bootstrapNodes)
+  trace "kademlia bootstrap finished", d = d.thisNode
   discard d.run()
 
 proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
