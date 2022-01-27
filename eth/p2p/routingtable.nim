@@ -6,6 +6,13 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# - manage Kademlia buckets based on NodeIDs from Node.id. Node.node is not used.
+# - uses ThisNode (the .id only) to calculate distances and bucket logic
+# - stores, but not uses, the address and key info as part of the Node structure
+# - stores candidate nodes per bucket in a replacementCache
+# - TODO: can't see anything removing nodes from the replacelemtCache
+# - TODO: kademlia is accessing the replacementCache directly in populateNotFullBuckets
+
 {.push raises: [Defect].}
 
 import
