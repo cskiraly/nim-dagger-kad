@@ -30,7 +30,7 @@ type
     pingFutures: Table[Node, Future[bool]]
 
 const
-  REQUEST_TIMEOUT = chronos.milliseconds(1500) # timeout of message round trips
+  REQUEST_TIMEOUT = chronos.milliseconds(5000) # timeout of message round trips
 
 proc updateRoutingTable*(k: BondProtocol, n: Node) : void
     {.raises: [ValueError, Defect], gcsafe.}
