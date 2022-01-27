@@ -45,7 +45,7 @@ procSuite "Discovery Tests":
 
   asyncTest "Discover nodes":
     let
-      nodecount = 500
+      nodecount = 2
       rng = keys.newRng()
 
     var nodes: seq[DiscoveryProtocol]
