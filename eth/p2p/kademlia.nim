@@ -35,8 +35,6 @@ type
     thisNode: Node
     routing: RoutingTable
     bond: BondProtocol[Wire]
-    pongFutures: Table[seq[byte], Future[bool]]
-    pingFutures: Table[Node, Future[bool]]
     neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
     rng: ref BrHmacDrbgContext
 
