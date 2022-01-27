@@ -5,6 +5,12 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# wire interface is implicit
+# - sendPing(Node)
+# - sendPong(Node, any)
+# - sendFindNode(Node, NodeId)
+# - sendNeighbour(Node, seq[Node])
+
 {.push raises: [Defect].}
 
 import
@@ -81,6 +87,8 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node):
 # Exported for test.
 proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
                nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
+  # used un lookup only
+  # sends a (1-hop) findNode, waits responses and bonds to them, finally sends back bonded one 
   if remote in k.neighboursCallbacks:
     # Sometimes findNode is called while another findNode is already in flight.
     # It's a bug when this happens, and the logic should probably be fixed
