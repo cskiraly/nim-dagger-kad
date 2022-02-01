@@ -49,7 +49,7 @@ type
 
 const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
 
-# used in tx
+# --- message TX ----
 proc append*(w: var RlpWriter, a: IpAddress) =
   case a.family
   of IpAddressFamily.IPv6:
@@ -61,7 +61,6 @@ proc append(w: var RlpWriter, p: Port) = w.append(p.int)
 proc append(w: var RlpWriter, pk: PublicKey) = w.append(pk.toRaw())
 proc append(w: var RlpWriter, h: MDigest[256]) = w.append(h.data)
 
-# used in tx
 proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte] =
   ## Create and sign a UDP message to be sent to a remote node.
   ##
@@ -73,35 +72,6 @@ proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte]
   let signature = @(pk.sign(encodedData).toRaw())
   let msgHash = keccak256.digest(signature & encodedData)
   result = @(msgHash.data) & signature & encodedData
-
-# used in reception
-proc validateMsgHash(msg: openArray[byte]): DiscResult[MDigest[256]] =
-  if msg.len > HEAD_SIZE:
-    var ret: MDigest[256]
-    ret.data[0 .. ^1] = msg.toOpenArray(0, ret.data.high)
-    if ret == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high)):
-      ok(ret)
-    else:
-      err("disc: invalid message hash")
-  else:
-    err("disc: msg missing hash")
-
-# used in reception
-proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
-  if msg.len <= HEAD_SIZE:
-    return err("disc: can't get public key")
-  let sig = ? Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
-  recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
-
-# used in reception
-proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]]
-    {.raises: [DiscProtocolError, Defect].} =
-  # Check against possible RangeError
-  if msg[HEAD_SIZE].int < CommandId.low.ord or
-     msg[HEAD_SIZE].int > CommandId.high.ord:
-    raise newException(DiscProtocolError, "Unsupported packet id")
-
-  result = (cmdId: msg[HEAD_SIZE].CommandId, payload: msg[HEAD_SIZE + 1 .. ^1])
 
 proc expiration(): uint32 =
   result = uint32(epochTime() + EXPIRATION)
@@ -229,9 +199,47 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
   else:
     trace "Invalid target public key received"
 
+# ---- kademlia proxy ---
+
+proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
+  d.kademlia.lookupRandom()
+
+proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
+  d.kademlia.resolve(n)
+
+proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] =
+  d.kademlia.randomNodes(count)
+
 # --- message reception ----
 
-#below
+# Receive and its helpers
+
+proc validateMsgHash(msg: openArray[byte]): DiscResult[MDigest[256]] =
+  if msg.len > HEAD_SIZE:
+    var ret: MDigest[256]
+    ret.data[0 .. ^1] = msg.toOpenArray(0, ret.data.high)
+    if ret == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high)):
+      ok(ret)
+    else:
+      err("disc: invalid message hash")
+  else:
+    err("disc: msg missing hash")
+
+proc recoverMsgPublicKey(msg: openArray[byte]): DiscResult[PublicKey] =
+  if msg.len <= HEAD_SIZE:
+    return err("disc: can't get public key")
+  let sig = ? Signature.fromRaw(msg.toOpenArray(MAC_SIZE, HEAD_SIZE))
+  recover(sig, msg.toOpenArray(HEAD_SIZE, msg.high))
+
+proc unpack(msg: openArray[byte]): tuple[cmdId: CommandId, payload: seq[byte]]
+    {.raises: [DiscProtocolError, Defect].} =
+  # Check against possible RangeError
+  if msg[HEAD_SIZE].int < CommandId.low.ord or
+     msg[HEAD_SIZE].int > CommandId.high.ord:
+    raise newException(DiscProtocolError, "Unsupported packet id")
+
+  result = (cmdId: msg[HEAD_SIZE].CommandId, payload: msg[HEAD_SIZE + 1 .. ^1])
+
 proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
     bool {.raises: [DiscProtocolError, RlpError].} =
   ## Can only raise `DiscProtocolError` and all of `RlpError`
@@ -248,8 +256,7 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-#below
-proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
+proc receive[srcT](d: DiscoveryProtocol, src: srcT, msg: openArray[byte])
     {.raises: [DiscProtocolError, RlpError, ValueError, Defect].} =
   # Receive and if needed create Kademlia Node before passing message up
   # Note: export only needed for testing
@@ -260,7 +267,7 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
       let (cmdId, payload) = unpack(msg)
 
       if expirationValid(cmdId, payload):
-        let node = newNode(remotePubkey[], a)
+        let node = newNode(remotePubkey[], src)
         case cmdId
         of cmdPing:
           d.recvPing(node, msgHash[])
@@ -271,13 +278,14 @@ proc receive*(d: DiscoveryProtocol, a: Address, msg: openArray[byte])
         of cmdFindNode:
           d.recvFindNode(node, payload)
       else:
-        trace "Received msg already expired", cmdId, a
+        trace "Received msg already expired", cmdId, src
     else:
-      notice "Wrong public key from ", a, err = remotePubkey.error
+      notice "Wrong public key from ", src, err = remotePubkey.error
   else:
-    notice "Wrong msg mac from ", a
+    notice "Wrong msg mac from ", src
 
-#below
+# Open and its helpers, including RX callback binding
+
 proc processClient(transp: DatagramTransport, raddr: TransportAddress):
     Future[void] {.async, raises: [Defect].} =
   # callback for undelying layer reception
@@ -297,18 +305,16 @@ proc processClient(transp: DatagramTransport, raddr: TransportAddress):
   except ValueError as e:
     debug "Receive failed", exc = e.name, err = e.msg
 
-#below
-proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
+proc openUdp(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
   # TODO allow binding to specific IP / IPv6 / etc
   # registers "processClient" callback in undelying layer
   let ta = initTAddress(IPv4_any(), d.address.udpPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
+proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
+  d.openUdp()
 
-#helpers
-
-proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
-  d.kademlia.lookupRandom()
+#Bootstrap and its helpers
 
 proc run(d: DiscoveryProtocol) {.async.} =
   while true:
@@ -320,59 +326,3 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
   await d.kademlia.bootstrap(d.bootstrapNodes)
   trace "kademlia bootstrap finished", d = d.thisNode
   discard d.run()
-
-proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
-  d.kademlia.resolve(n)
-
-proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] =
-  d.kademlia.randomNodes(count)
-
-when isMainModule:
-  import logging, stew/byteutils
-
-  const LOCAL_BOOTNODES = [
-    "enode://6456719e7267e061161c88720287a77b80718d2a3a4ff5daeba614d029dc77601b75e32190aed1c9b0b9ccb6fac3bcf000f48e54079fa79e339c25d8e9724226@127.0.0.1:30301"
-  ]
-
-  addHandler(newConsoleLogger())
-
-  block:
-    let m = hexToSeqByte"79664bff52ee17327b4a2d8f97d8fb32c9244d719e5038eb4f6b64da19ca6d271d659c3ad9ad7861a928ca85f8d8debfbe6b7ade26ad778f2ae2ba712567fcbd55bc09eb3e74a893d6b180370b266f6aaf3fe58a0ad95f7435bf3ddf1db940d20102f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2"
-    discard validateMsgHash(m).expect("valid hash")
-    var remotePubkey = recoverMsgPublicKey(m).expect("valid key")
-
-    let (cmdId, payload) = unpack(m)
-    doAssert(payload == hexToSeqByte"f2cb842edbd4d182944382765da0ab56fb9e64a85a597e6bb27c656b4f1afb7e06b0fd4e41ccde6dba69a3c4a150845aaa4de2")
-    doAssert(cmdId == cmdPong)
-    doAssert(remotePubkey == PublicKey.fromHex(
-      "78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d")[])
-
-  let privKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
-
-  # echo privKey
-
-  # block:
-  #   var b = @[1.byte, 2, 3]
-  #   let m = pack(cmdPing, b.initBytesRange, privKey)
-  #   let (remotePubkey, cmdId, payload) = unpack(m)
-  #   doAssert(remotePubkey.raw_key.toHex == privKey.public_key.raw_key.toHex)
-
-  var bootnodes = newSeq[ENode]()
-  for item in LOCAL_BOOTNODES:
-    bootnodes.add(ENode.fromString(item)[])
-
-  let listenPort = Port(30310)
-  var address = Address(udpPort: listenPort, tcpPort: listenPort)
-  address.ip.family = IpAddressFamily.IPv4
-  let discovery = newDiscoveryProtocol(privkey, address, bootnodes)
-
-  echo discovery.thisNode.node.pubkey
-  echo "this_node.id: ", discovery.thisNode.id.toHex()
-
-  discovery.open()
-
-  proc test() {.async.} =
-    {.gcsafe.}:
-      await discovery.bootstrap()
-
-  waitFor test()
