@@ -49,8 +49,21 @@ type
 
 const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
 
+# --- constructor ---
+
+proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
+                           bootstrapNodes: openArray[ENode], rng = newRng()
+                           ): DiscoveryProtocol =
+  result.new()
+  result.privKey = privKey
+  result.address = address
+  result.bootstrapNodes = newSeqOfCap[Node](bootstrapNodes.len)
+  for n in bootstrapNodes: result.bootstrapNodes.add(newNode(n))
+  result.thisNode = newNode(privKey.toPublicKey(), address)
+  result.kademlia = newKademliaProtocol(result.thisNode, result, rng = rng)
+
 # --- message TX ----
-proc append*(w: var RlpWriter, a: IpAddress) =
+proc append(w: var RlpWriter, a: IpAddress) =
   case a.family
   of IpAddressFamily.IPv6:
     w.append(a.address_v6)
@@ -76,8 +89,6 @@ proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte]
 proc expiration(): uint32 =
   result = uint32(epochTime() + EXPIRATION)
 
-# --- Wire protocol encoders ---
-
 proc send(d: DiscoveryProtocol, n: ENode, data: seq[byte]) {.raises: [Defect].} =
   let ta = initTAddress(n.address.ip, n.address.udpPort)
   let f = d.transp.sendTo(ta, data)
@@ -85,7 +96,14 @@ proc send(d: DiscoveryProtocol, n: ENode, data: seq[byte]) {.raises: [Defect].} 
     if f.failed:
       debug "Discovery send failed", msg = f.readError.msg
 
+# --- Wire protocol encoders ---
+# - defines message structure per message type
+# - uses RLP binary encoding on the above structure
+# - packs using common external format as:  hash | signature | rlp-encoded-data
+# - outputs to common "send" function
+
 proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
+  # TODO: check why PROTO_VERSION, d.address, n.node.address are not used in recvPing
   let payload = rlp.encode((PROTO_VERSION, d.address, n.node.address,
                             expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
@@ -129,21 +147,13 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
 
   if nodes.len != 0: flush()
 
-# --- constructor ---
+# ---- rlp message decoders ---
 
-proc newDiscoveryProtocol*(privKey: PrivateKey, address: Address,
-                           bootstrapNodes: openArray[ENode], rng = newRng()
-                           ): DiscoveryProtocol =
-  result.new()
-  result.privKey = privKey
-  result.address = address
-  result.bootstrapNodes = newSeqOfCap[Node](bootstrapNodes.len)
-  for n in bootstrapNodes: result.bootstrapNodes.add(newNode(n))
-  result.thisNode = newNode(privKey.toPublicKey(), address)
-  result.kademlia = newKademliaProtocol(result.thisNode, result, rng = rng)
-
-
-# ---- message decoders ---
+# --- Wire protocol decoders ---
+# - uses common external format as:  hash | signature | rlp-encoded-data
+# - uses RLP binary encoding inside
+# - defines message structure per message
+# - outputs to common "send" function
 
 proc recvPing(d: DiscoveryProtocol, node: Node, msgHash: MDigest[256])
     {.raises: [ValueError, Defect].} =

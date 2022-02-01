@@ -71,6 +71,7 @@ proc add(k: KBucket, n: Node): Node =
   k.lastUpdated = epochTime()
   let nodeIdx = k.nodes.find(n)
   if nodeIdx != -1:
+      # TODO: here we might need to merge network related info
       k.nodes.delete(nodeIdx)
       k.nodes.add(n)
   elif k.len < BUCKET_SIZE:

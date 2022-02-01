@@ -149,6 +149,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   let nodesSeen = new(HashSet[Node])
 
   proc excludeIfAsked(nodes: seq[Node]): seq[Node] =
+    # Returns at most FIND_CONCURRENCY nodes, not yet asked, closest to NodeId
     result = toSeq(items(nodes.toHashSet() - nodesAsked))
     sortByDistance(result, nodeId, FIND_CONCURRENCY)
 
@@ -163,6 +164,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
     for node in nodesToAsk:
       findNodeRequests.add(k.findNode(nodesSeen, nodeId, node))
 
+    # waits for all FIND_CONCURRENCY requests to return or timeout. TODO: k out of n suffice?
     await allFutures(findNodeRequests)
 
     for candidates in findNodeRequests:
@@ -171,7 +173,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
       doAssert(candidates.finished() and not(candidates.failed()))
       closest.add(candidates.read())
 
-    sortByDistance(closest, nodeId, BUCKET_SIZE)
+    sortByDistance(closest, nodeId, BUCKET_SIZE) # TODO: why BUCKET_SIZE here, and not FIND_CONCURRENCY?
     nodesToAsk = excludeIfAsked(closest)
 
   trace "Kademlia lookup finished", target = nodeId.toHex, closest
