@@ -111,7 +111,7 @@ proc bondDiscard*(k: BondProtocol, n: Node) {.async.} =
 
 proc recvPong*(k: BondProtocol, n: Node, token: seq[byte]) =
   trace "<<< pong from ", dst = k.thisNode, src = n
-  let pingid = token & @(n.node.pubkey.toRaw)
+  let pingid = pingId(n, token)
   var future: Future[bool]
   if k.pongFutures.take(pingid, future):
     future.complete(true)
