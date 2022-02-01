@@ -43,9 +43,8 @@ procSuite "Discovery Tests":
     bootNode = initDiscoveryNode(bootNodeKey, bootNodeAddr, @[]) # just a shortcut for new and open
   waitFor bootNode.bootstrap()  # immediate, since no bootnodes are defined above
 
-  asyncTest "Discover nodes":
+  proc discoverNodes(nodecount: int) {.async.} =
     let
-      nodecount = 2
       rng = keys.newRng()
 
     var nodes: seq[DiscoveryProtocol]
@@ -70,3 +69,6 @@ procSuite "Discovery Tests":
     let targetNodeId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
     let nodesFound = await nodes[0].kademlia.lookup(targetNodeId)
     echo "nodes found:", nodesFound.deduplicate()
+
+  asyncTest "Discover nodes UDP":
+    await discoverNodes(nodecount=2)
