@@ -20,7 +20,6 @@ import
   chronos, bearssl, chronicles, stint, nimcrypto/keccak,
   chronos/timer, # needed for doSleep parameter definition timer.Duration
   ../keys,
-  ./enode,
   ./node,
   ./helpers,
   ./routingtable,
