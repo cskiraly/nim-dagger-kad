@@ -459,7 +459,6 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
 #=========== Providers ======
 proc addProvider*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
   result = await d.kademlia.lookup(cId)
-  #TODO: unique on above
   for n in result:
     d.sendAddProvider(n, cId)
 

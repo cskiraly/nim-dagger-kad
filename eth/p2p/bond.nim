@@ -100,7 +100,7 @@ proc bond*(k: BondProtocol, n: Node): Future[bool] {.async.} =
     debug "Bonding failed, already waiting for ping", n, this=k.thisNode
     return false
 
-  discard await k.waitPing(n) #TODO: why is this needed here, seems like a useless timeout
+  discard await k.waitPing(n) #TODO: why is this needed here? seems like a useless timeout delaying bonding. I guess we can move this to the end
 
   trace "Bonding completed successfully", n, this=k.thisNode
   k.updateRoutingTable(n)
