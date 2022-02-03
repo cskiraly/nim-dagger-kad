@@ -200,6 +200,8 @@ proc decodeNodes(neighboursList: Rlp) : seq[Node]
       warn "Could not parse public key"
       continue
 
+    result.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
+
 proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
     {.raises: [RlpError, Defect].} =
   trace "<<< neighbours from ", dst = d.thisNode, src = node
