@@ -10,6 +10,8 @@
 # - sendPong(Node, any)
 # - sendFindNode(Node, NodeId)
 # - sendNeighbour(Node, seq[Node])
+# handles kademlia routing tables
+# handles FindNode and Neighbour messaging and timeouts
 
 {.push raises: [Defect].}
 
@@ -85,7 +87,7 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node):
 # Exported for test.
 proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
                nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
-  # used un lookup only
+  # used in lookup only
   # sends a (1-hop) findNode, waits responses and bonds to them, finally sends back bonded one 
   if remote in k.neighboursCallbacks:
     # Sometimes findNode is called while another findNode is already in flight.

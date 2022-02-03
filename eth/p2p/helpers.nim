@@ -14,5 +14,6 @@ proc doSleep*(timeout: timer.Duration, p: proc() {.gcsafe, raises: [Defect].}) {
   p()
 
 template onTimeout*(timeout: timer.Duration, b: untyped) =
+  # execute body when timeout expires
   asyncSpawn doSleep(timeout) do():
     b

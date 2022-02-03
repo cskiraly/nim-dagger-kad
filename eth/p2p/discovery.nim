@@ -47,6 +47,7 @@ type
 
   DiscResult*[T] = Result[T, cstring]
 
+# number of mandatory fields, also used to get the index of expiration
 const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
 
 # --- constructor ---
@@ -319,6 +320,7 @@ proc openUdp(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
   # TODO allow binding to specific IP / IPv6 / etc
   # registers "processClient" callback in undelying layer
   let ta = initTAddress(IPv4_any(), d.address.udpPort)
+  # store DiscoveryProtocol as callback user data
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
 proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
