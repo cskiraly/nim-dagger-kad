@@ -43,7 +43,7 @@ proc `$`*(n: Node): string =
   if n == nil:
     "Node[local]"
   else:
-    "Node[" & $n.node.address.ip & ":" & $n.node.address.udpPort & "]"
+    "Node:" & $(n.id mod 1000) & "[" & $n.node.address.ip & ":" & $n.node.address.udpPort & "]"
 
 proc hash*(n: Node): hashes.Hash = hash(n.node.pubkey.toRaw)
 proc `==`*(a, b: Node): bool = (a.isNil and b.isNil) or
