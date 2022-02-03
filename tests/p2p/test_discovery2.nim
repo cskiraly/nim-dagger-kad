@@ -49,8 +49,9 @@ procSuite "Discovery Tests":
 
     var nodes: seq[DiscoveryProtocol]
     for i in 0..<nodecount:
+      let bootnodes = @[bootENode]
       let node = initDiscoveryNode(PrivateKey.random(rng[]), localAddress(20302 + i),
-        @[bootENode])
+        bootnodes)
       nodes.add(node)
     info "---- STARTING BOOSTRAPS ---"
 
@@ -66,9 +67,14 @@ procSuite "Discovery Tests":
 
     info "---- STARTING LOOKUP ---"
 
-    let targetNodeId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
-    let nodesFound = await nodes[0].kademlia.lookup(targetNodeId)
-    echo "nodes found:", nodesFound.deduplicate()
+    let targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
+    let nodesFound = await nodes[0].kademlia.lookup(targetId)
+    echo "nodes found: ", nodesFound.deduplicate()
+
+    let addedTo = await nodes[0].addProvider(targetId)
+    echo "Provider added to: ", addedTo
+    let providers = await nodes[0].getProviders(targetId)
+    await sleepAsync(5.seconds)
 
   asyncTest "Discover nodes UDP":
     await discoverNodes(nodecount=2)
