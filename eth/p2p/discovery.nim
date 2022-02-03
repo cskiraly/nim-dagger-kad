@@ -478,7 +478,16 @@ proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: ti
       d.providersCallbacks.del(qId)
       fut.complete(nodes)
 
-proc getProviders*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
+proc getProviders*(
+    d: DiscoveryProtocol,
+    cId: NodeId,
+    maxitems: int = 5,
+    timeout: timer.Duration = chronos.milliseconds(5000)
+  ): Future[seq[Node]] {.async.} =
+  ## Search for providers of the given cId.
+  ##
+  ## Providers are not (by default) bonded, so they are not verified.
+  ## Search until maxitems providers are found or the timeout expires.
   ## There is no one-to-one correspondance between cmdGetProviders messages and cmdProviders responses,
   ## and it is useless to try to wait for all the responses here with a simple await. What we need is enough
   ## responses or a timeout. An accumulator of responses that is fireing on condition.
@@ -489,5 +498,5 @@ proc getProviders*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async
   for n in nodesNearby:
     d.sendGetProviders(n, cId)
 
-  var providers = await d.waitProviders(cId, 5, chronos.milliseconds(5000))
+  var providers = await d.waitProviders(cId, maxitems, timeout)
   info "getProviders collected: ", providers
