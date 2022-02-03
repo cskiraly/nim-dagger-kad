@@ -174,8 +174,8 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
       doAssert(candidates.finished() and not(candidates.failed()))
       closest.add(candidates.read())
 
+    closest = closest.deduplicate()
     sortByDistance(closest, nodeId, BUCKET_SIZE) # TODO: why BUCKET_SIZE here, and not FIND_CONCURRENCY?
-    # TODO: We also need Unique here
     nodesToAsk = excludeIfAsked(closest)
 
   trace "Kademlia lookup finished", target = nodeId.toHex, closest
