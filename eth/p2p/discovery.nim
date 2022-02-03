@@ -90,7 +90,10 @@ proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte]
 proc expiration(): uint32 =
   result = uint32(epochTime() + EXPIRATION)
 
-proc send(d: DiscoveryProtocol, n: ENode, data: seq[byte]) {.raises: [Defect].} =
+proc send(d: DiscoveryProtocol, dst: Node, data: seq[byte]) {.raises: [Defect].} =
+  let n = dst.node
+  trace "sendig to:", dst = n
+
   let ta = initTAddress(n.address.ip, n.address.udpPort)
   let f = d.transp.sendTo(ta, data)
   f.callback = proc(data: pointer) {.gcsafe.} =
@@ -110,21 +113,21 @@ proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] {.raises: [Defect].} =
   let msg = pack(cmdPing, payload, d.privKey)
   result = msg[0 ..< MAC_SIZE]
   trace ">>> ping ", src = d.thisNode, dst = n
-  d.send(n.node, msg)
+  d.send(n, msg)
 
 proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
   let payload = rlp.encode((n.node.address, token, expiration()))
   let msg = pack(cmdPong, payload, d.privKey)
   trace ">>> pong ", src = d.thisNode, dst = n
-  d.send(n.node, msg)
+  d.send(n, msg)
 
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
   data[32 .. ^1] = targetNodeId.toByteArrayBE()
   let payload = rlp.encode((data, expiration()))
   let msg = pack(cmdFindNode, payload, d.privKey)
-  trace ">>> find_node to ", src = d.thisNode, dst = n#, ": ", msg.toHex()
-  d.send(n.node, msg)
+  trace ">>> find_node to ", src = d.thisNode, dst = n
+  d.send(n, msg)
 
 proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
