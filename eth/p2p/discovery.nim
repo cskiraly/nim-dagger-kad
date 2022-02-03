@@ -443,11 +443,13 @@ proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
 
 proc run(d: DiscoveryProtocol) {.async.} =
   while true:
+    trace "Starting periodic random lookup", d = d.thisNode
     discard await d.lookupRandom()
-    await sleepAsync(chronos.seconds(3))
+    await sleepAsync(chronos.seconds(3)) # TODO: expose as const
     trace "Discovered nodes", d = d.thisNode, nodes = d.kademlia.nodesDiscovered
 
 proc bootstrap*(d: DiscoveryProtocol) {.async.} =
+  trace "kademlia bootstrap start", d = d.thisNode
   await d.kademlia.bootstrap(d.bootstrapNodes)
   trace "kademlia bootstrap finished", d = d.thisNode
   discard d.run()
