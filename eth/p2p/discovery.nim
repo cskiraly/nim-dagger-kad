@@ -9,10 +9,12 @@
 
 import
   std/times,
+  std/tables,
   chronos, stint, nimcrypto/keccak, chronicles, bearssl,
+  chronos/timer, # needed for doSleep parameter definition timer.Duration
   stew/[objects, results],
   ".."/[keys, rlp],
-  "."/[kademlia, enode, node]
+  "."/[kademlia, enode, node, helpers]
 
 export
   Node, results
@@ -36,6 +38,8 @@ type
     thisNode*: Node
     kademlia*: KademliaProtocol[DiscoveryProtocol]
     transp: DatagramTransport # uses chronos
+    providers*: Table[NodeId, seq[Node]]
+    providersCallbacks: Table[NodeId, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
 
   CommandId = enum
     cmdPing = 1
@@ -439,3 +443,51 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
   await d.kademlia.bootstrap(d.bootstrapNodes)
   trace "kademlia bootstrap finished", d = d.thisNode
   discard d.run()
+
+
+
+#=========== Providers ======
+proc addProvider*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
+  result = await d.kademlia.lookup(cId)
+  for n in result:
+    d.sendAddProvider(n, cId)
+
+proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: timer.Duration):
+    Future[seq[Node]] {.raises: [Defect].} =
+  ## TODO: generlalize
+  ## TODO: make callback work based on queryID, not Node
+  doAssert(qId notin d.providersCallbacks)
+  result = newFuture[seq[Node]]("waitProviders")
+  let fut = result
+  var nodes = newSeqOfCap[Node](maxitems)
+  d.providersCallbacks[qId] = proc(n: seq[Node]) {.gcsafe, raises: [Defect].} =
+    # This callback is expected to be called multiple times because nodes usually
+    # split the replies into multiple packets, so we only complete the
+    # future event.set() we've received enough neighbours.
+
+    for i in n:
+      if i != d.thisNode:
+        nodes.add(i)
+        if nodes.len == maxitems:
+          d.providersCallbacks.del(qId)
+          doAssert(not fut.finished)
+          fut.complete(nodes)
+
+  onTimeout(timeout):
+    if not fut.finished:
+      d.providersCallbacks.del(qId)
+      fut.complete(nodes)
+
+proc getProviders*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
+  ## There is no one-to-one correspondance between cmdGetProviders messages and cmdProviders responses,
+  ## and it is useless to try to wait for all the responses here with a simple await. What we need is enough
+  ## responses or a timeout. An accumulator of responses that is fireing on condition.
+  ## For this, we better have a a query ID that is included in all responses.
+  ## We collect responses as they come it, and create a conditional waitProviders future that whatches these condotions.
+  ## like kademlia.waitNeigbours
+  let nodesNearby = await d.kademlia.lookup(cId)
+  for n in nodesNearby:
+    d.sendGetProviders(n, cId)
+
+  var providers = await d.waitProviders(cId, 5, chronos.milliseconds(5000))
+  info "getProviders collected: ", providers
