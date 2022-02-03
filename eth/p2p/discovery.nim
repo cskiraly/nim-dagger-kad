@@ -42,13 +42,16 @@ type
     cmdPong = 2
     cmdFindNode = 3
     cmdNeighbours = 4
+    cmdAddProvider = 5
+    cmdGetProviders = 6
+    cmdProviders = 7
 
   DiscProtocolError* = object of CatchableError
 
   DiscResult*[T] = Result[T, cstring]
 
 # number of mandatory fields, also used to get the index of expiration
-const MinListLen: array[CommandId, int] = [4, 3, 2, 2]
+const MinListLen: array[CommandId, int] = [4, 3, 2, 2, 3, 2, 2]
 
 # --- constructor ---
 
@@ -157,6 +160,28 @@ proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, neighbours: s
 
 proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   sendNodes(d, node, cmdNeighbours, neighbours)
+
+proc sendAddProvider*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
+  type NodeDesc = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
+  let cIdEnc = cId.toByteArrayBE()
+  let provider = d.thisNode.node
+  let providerEnc = (provider.address.ip, provider.address.udpPort,
+               provider.address.tcpPort, provider.pubkey)
+  let payload = rlp.encode((cIdEnc, providerEnc, expiration()))
+  let msg = pack(cmdAddProvider, payload, d.privKey)
+  info ">>> add_provider to ", src = d.thisNode, dst, cId
+  d.send(dst, msg)
+
+proc sendGetProviders*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
+  let cIdEnc = cId.toByteArrayBE()
+  let payload = rlp.encode((cIdEnc, expiration()))
+  let msg = pack(cmdGetProviders, payload, d.privKey)
+  info ">>> get_providers to ", src = d.thisNode, dst, cId
+  d.send(dst, msg)
+
+proc sendProviders*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
+  sendNodes(d, node, cmdProviders, neighbours)
+
 # ---- rlp message decoders ---
 
 # --- Wire protocol decoders ---
@@ -222,6 +247,63 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
     d.kademlia.recvFindNode(node, nodeId)
   else:
     trace "Invalid target public key received"
+
+proc recvAddProvider(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
+    {.raises: [RlpError, Defect].} =
+  let rlp = rlpFromBytes(payload)
+  info "<<< add_provider from ", dst = d.thisNode, src = node
+  let cId = readUintBE[256](rlp.listElem(0).toBytes)
+
+  let n = rlp.listElem(1)
+  let ipBlob = n.listElem(0).toBytes
+  var ip: IpAddress
+  case ipBlob.len
+  of 4:
+    ip = IpAddress(
+      family: IpAddressFamily.IPv4, address_v4: toArray(4, ipBlob))
+  of 16:
+    ip = IpAddress(
+      family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
+  else:
+    error "Wrong ip address length!"
+    return
+
+  let udpPort = n.listElem(1).toInt(uint16).Port
+  let tcpPort = n.listElem(2).toInt(uint16).Port
+  let pk = PublicKey.fromRaw(n.listElem(3).toBytes)
+  if pk.isErr:
+    warn "Could not parse public key"
+    return
+
+  #TODO: add checks, add signed version
+  let prov = newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort))
+  d.providers.mgetOrPut(cId, @[]).add(prov)
+
+  #TODO: check that CID is reasonably close to our NodeID
+
+proc recvGetProviders(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
+    {.raises: [RlpError, Defect].} =
+  let rlp = rlpFromBytes(payload)
+  info "<<< get_providers from ", dst = d.thisNode, src = node
+  let cId = readUintBE[256](rlp.listElem(0).toBytes)
+
+  #TODO: add checks, add signed version
+  let provs = d.providers.getOrDefault(cId)
+  info "providers:", provs
+  d.sendProviders(node, provs)
+
+#proc gotProviders*(d: DiscoveryProtocol, remote: Node, neighbours: seq[Node]) =
+
+
+proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+    {.raises: [RlpError, Defect].} =
+  info "<<< providers from ", dst = d.thisNode, src = node
+
+  let rlp = rlpFromBytes(payload)
+  let neighboursList = rlp.listElem(0)
+  let providers = decodeNodes(neighboursList)
+
+  warn "recvProviders adding ", this=d.thisNode, providers
 
 # ---- kademlia proxy ---
 
@@ -301,6 +383,12 @@ proc receive[srcT](d: DiscoveryProtocol, src: srcT, msg: openArray[byte])
           d.recvNeighbours(node, payload)
         of cmdFindNode:
           d.recvFindNode(node, payload)
+        of cmdAddProvider:
+          d.recvAddProvider(node, payload)
+        of cmdGetProviders:
+          d.recvGetProviders(node, payload)
+        of cmdProviders:
+          d.recvProviders(node, payload)
       else:
         trace "Received msg already expired", cmdId, src
     else:
