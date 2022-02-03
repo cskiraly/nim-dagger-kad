@@ -133,7 +133,7 @@ proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   trace ">>> find_node to ", src = d.thisNode, dst = n
   d.send(n, msg)
 
-proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
+proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
   type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
   var nodes = newSeqOfCap[Neighbour](MAX_NEIGHBOURS_PER_PACKET)
@@ -142,9 +142,9 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   template flush() =
     block:
       let payload = rlp.encode((nodes, expiration()))
-      let msg = pack(cmdNeighbours, payload, d.privKey)
-      trace ">>> Neighbours to", src = d.thisNode, dst = node, nodes
-      d.send(node.node, msg)
+      let msg = pack(cmdId, payload, d.privKey)
+      trace ">>> Nodes to", cmdId, src = d.thisNode, dst = node, nodes
+      d.send(node, msg)
       nodes.setLen(0)
 
   for i, n in neighbours:
@@ -155,6 +155,8 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
 
   if nodes.len != 0: flush()
 
+proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
+  sendNodes(d, node, cmdNeighbours, neighbours)
 # ---- rlp message decoders ---
 
 # --- Wire protocol decoders ---
