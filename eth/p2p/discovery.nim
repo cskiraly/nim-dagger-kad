@@ -473,7 +473,7 @@ proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: ti
   ## that this also means we can't use this call to check whther we are listed, actually, we
   ## could do this removal at the src of cmdProviders (TODO)
   ## * since a single call to this can capture cmdProviders messages from multiple nodes,
-  ## we should also deduplicate the list (TODO)
+  ## we should also deduplicate the list
   ## TODO: generlalize (similar function  in kademlia.waitNeighbours)
   doAssert(qId notin d.providersCallbacks)
   result = newFuture[seq[Node]]("waitProviders")
@@ -485,7 +485,7 @@ proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: ti
     # future event.set() we've received enough neighbours.
 
     for i in n:
-      if i != d.thisNode:
+      if i != d.thisNode and i notin nodes:
         nodes.add(i)
         if nodes.len == maxitems:
           d.providersCallbacks.del(qId)
@@ -517,6 +517,5 @@ proc getProviders*(
   for n in nodesNearby:
     d.sendGetProviders(n, cId)
 
-  #TODO: Unique
   result = await d.waitProviders(cId, maxitems, timeout)
   info "getProviders collected: ", result
