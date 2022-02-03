@@ -212,8 +212,9 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
 
 proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
     {.raises: [RlpError, ValueError, Defect].} =
+  ## Uses only last 32 bytes of 64 bytes sent
   let rlp = rlpFromBytes(payload)
-  trace "<<< find_node from ", node
+  trace "<<< find_node from ", dst = d.thisNode, src = node
   let rng = rlp.listElem(0).toBytes
   # Check for pubkey len
   if rng.len == 64:
