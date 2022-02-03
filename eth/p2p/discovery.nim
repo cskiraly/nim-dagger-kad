@@ -122,6 +122,10 @@ proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
   d.send(n, msg)
 
 proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
+  ## The specification asks for the Public key to be sent, which is 64-bytes in its uncompressed form.
+  ## However, this implementation is sending the Kad ID, which is the hash of the public key,
+  ## and thus uses only the last 32 bytes.
+  ## TODO: how this realtes to various specs?
   var data: array[64, byte]
   data[32 .. ^1] = targetNodeId.toByteArrayBE()
   let payload = rlp.encode((data, expiration()))
