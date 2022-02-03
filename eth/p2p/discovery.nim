@@ -449,12 +449,21 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
 #=========== Providers ======
 proc addProvider*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
   result = await d.kademlia.lookup(cId)
+  #TODO: unique on above
   for n in result:
     d.sendAddProvider(n, cId)
 
 proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: timer.Duration):
     Future[seq[Node]] {.raises: [Defect].} =
-  ## TODO: generlalize
+  ## Process incoming cmdProviders messages waiting for enough providers, or timeout
+  ##
+  ## Since we limit the number of providers in the result, it is worth doing some filtering
+  ## * we remove outselves, assuming the node already knows whether it is a provider. Note
+  ## that this also means we can't use this call to check whther we are listed, actually, we
+  ## could do this removal at the src of cmdProviders (TODO)
+  ## * since a single call to this can capture cmdProviders messages from multiple nodes,
+  ## we should also deduplicate the list (TODO)
+  ## TODO: generlalize (similar function  in kademlia.waitNeighbours)
   ## TODO: make callback work based on queryID, not Node
   doAssert(qId notin d.providersCallbacks)
   result = newFuture[seq[Node]]("waitProviders")
@@ -498,5 +507,6 @@ proc getProviders*(
   for n in nodesNearby:
     d.sendGetProviders(n, cId)
 
+  #TODO: Unique
   var providers = await d.waitProviders(cId, maxitems, timeout)
   info "getProviders collected: ", providers

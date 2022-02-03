@@ -87,7 +87,7 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node):
 proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
                nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
   # used in lookup only
-  # sends a (1-hop) findNode, waits responses and bonds to them, finally sends back bonded one 
+  # sends a (1-hop) findNode, waits responses and bonds to them, finally sends back bonded ones
   if remote in k.neighboursCallbacks:
     # Sometimes findNode is called while another findNode is already in flight.
     # It's a bug when this happens, and the logic should probably be fixed
@@ -175,6 +175,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
       closest.add(candidates.read())
 
     sortByDistance(closest, nodeId, BUCKET_SIZE) # TODO: why BUCKET_SIZE here, and not FIND_CONCURRENCY?
+    # TODO: We also need Unique here
     nodesToAsk = excludeIfAsked(closest)
 
   trace "Kademlia lookup finished", target = nodeId.toHex, closest
@@ -254,6 +255,9 @@ proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId)
     # FIXME: This is not correct; a node we've bonded before may have become unavailable
     # and thus removed from self.routing, but once it's back online we should accept
     # find_nodes from them.
+    # TODO: this also blocks until the bonding is finalized, which includes an extra ping timeout. Is it needed?
+    # TODO: is this also blocking when the node does not make it to the routing table? E.g. while it is in the replacementCache.
+    # TODO: seems we are sending back itself to the node as part of the list. Should this be excluded? 
     trace "Ignoring find_node request from unknown node ", remote
     return
   k.bond.updateRoutingTable(remote)
