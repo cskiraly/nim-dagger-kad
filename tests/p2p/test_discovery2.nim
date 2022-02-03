@@ -73,8 +73,9 @@ procSuite "Discovery Tests":
 
     let addedTo = await nodes[0].addProvider(targetId)
     echo "Provider added to: ", addedTo
-    let providers = await nodes[0].getProviders(targetId)
-    await sleepAsync(5.seconds)
+    let providers = await nodes[1].getProviders(targetId)
+    echo "Providers:", providers
+  
 
   asyncTest "Discover nodes UDP":
     await discoverNodes(nodecount=2)
