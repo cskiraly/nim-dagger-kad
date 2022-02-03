@@ -55,7 +55,7 @@ type
   DiscResult*[T] = Result[T, cstring]
 
 # number of mandatory fields, also used to get the index of expiration
-const MinListLen: array[CommandId, int] = [4, 3, 2, 2, 3, 2, 2]
+const MinListLen: array[CommandId, int] = [4, 3, 2, 3, 3, 2, 3]
 
 # --- constructor ---
 
@@ -81,6 +81,7 @@ proc append(w: var RlpWriter, a: IpAddress) =
 proc append(w: var RlpWriter, p: Port) = w.append(p.int)
 proc append(w: var RlpWriter, pk: PublicKey) = w.append(pk.toRaw())
 proc append(w: var RlpWriter, h: MDigest[256]) = w.append(h.data)
+proc append(w: var RlpWriter, x: UInt256) = w.append(x.toBytesBE)
 
 proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte] =
   ## Create and sign a UDP message to be sent to a remote node.
@@ -140,7 +141,7 @@ proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   trace ">>> find_node to ", src = d.thisNode, dst = n
   d.send(n, msg)
 
-proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, neighbours: seq[Node]) =
+proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, qId: NodeId, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
   type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
   var nodes = newSeqOfCap[Neighbour](MAX_NEIGHBOURS_PER_PACKET)
@@ -148,7 +149,7 @@ proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, neighbours: s
 
   template flush() =
     block:
-      let payload = rlp.encode((nodes, expiration()))
+      let payload = rlp.encode((qId, nodes, expiration()))
       let msg = pack(cmdId, payload, d.privKey)
       trace ">>> Nodes to", cmdId, src = d.thisNode, dst = node, nodes
       d.send(node, msg)
@@ -162,8 +163,8 @@ proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, neighbours: s
 
   if nodes.len != 0: flush()
 
-proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
-  sendNodes(d, node, cmdNeighbours, neighbours)
+proc sendNeighbours*(d: DiscoveryProtocol, node: Node, qId: NodeId, neighbours: seq[Node]) =
+  sendNodes(d, node, cmdNeighbours, qId, neighbours)
 
 proc sendAddProvider*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
   type NodeDesc = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
@@ -183,8 +184,8 @@ proc sendGetProviders*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
   info ">>> get_providers to ", src = d.thisNode, dst, cId
   d.send(dst, msg)
 
-proc sendProviders*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
-  sendNodes(d, node, cmdProviders, neighbours)
+proc sendProviders*(d: DiscoveryProtocol, node: Node, qId: NodeId, neighbours: seq[Node]) =
+  sendNodes(d, node, cmdProviders, qId, neighbours)
 
 # ---- rlp message decoders ---
 
@@ -235,7 +236,7 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
     {.raises: [RlpError, Defect].} =
   trace "<<< neighbours from ", dst = d.thisNode, src = node
   let rlp = rlpFromBytes(payload)
-  let neighboursList = rlp.listElem(0)
+  let neighboursList = rlp.listElem(1)
   let neighbours = decodeNodes(neighboursList)
   d.kademlia.recvNeighbours(node, neighbours)
 
@@ -294,7 +295,7 @@ proc recvGetProviders(d: DiscoveryProtocol, node: Node, payload: openArray[byte]
   #TODO: add checks, add signed version
   let provs = d.providers.getOrDefault(cId)
   info "providers:", provs
-  d.sendProviders(node, provs)
+  d.sendProviders(node, cId, provs)
 
 #proc gotProviders*(d: DiscoveryProtocol, remote: Node, neighbours: seq[Node]) =
 
@@ -304,7 +305,8 @@ proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   info "<<< providers from ", dst = d.thisNode, src = node
 
   let rlp = rlpFromBytes(payload)
-  let neighboursList = rlp.listElem(0)
+  let qId = UInt256.fromBytesBE(rlp.listElem(0).toBytes)
+  let neighboursList = rlp.listElem(1)
   let providers = decodeNodes(neighboursList)
 
   warn "recvProviders adding ", this=d.thisNode, providers
@@ -457,6 +459,7 @@ proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: ti
     Future[seq[Node]] {.raises: [Defect].} =
   ## Process incoming cmdProviders messages waiting for enough providers, or timeout
   ##
+  ## Incoming messages are matched with the original query based on the qId query ID.
   ## Since we limit the number of providers in the result, it is worth doing some filtering
   ## * we remove outselves, assuming the node already knows whether it is a provider. Note
   ## that this also means we can't use this call to check whther we are listed, actually, we
@@ -464,7 +467,6 @@ proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: ti
   ## * since a single call to this can capture cmdProviders messages from multiple nodes,
   ## we should also deduplicate the list (TODO)
   ## TODO: generlalize (similar function  in kademlia.waitNeighbours)
-  ## TODO: make callback work based on queryID, not Node
   doAssert(qId notin d.providersCallbacks)
   result = newFuture[seq[Node]]("waitProviders")
   let fut = result

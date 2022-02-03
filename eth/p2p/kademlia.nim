@@ -263,7 +263,7 @@ proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId)
   k.bond.updateRoutingTable(remote)
   var found = k.routing.neighbours(nodeId)
   found.sort() do(x, y: Node) -> int: cmp(x.id, y.id)
-  k.wire.sendNeighbours(remote, found)
+  k.wire.sendNeighbours(remote, nodeId, found)
 
 proc randomNodes*(k: KademliaProtocol, count: int): seq[Node] =
   k.routing.randomNodes(count)
