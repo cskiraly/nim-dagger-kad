@@ -310,6 +310,12 @@ proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   let providers = decodeNodes(neighboursList)
 
   warn "recvProviders adding ", this=d.thisNode, providers
+  let cb = d.providersCallbacks.getOrDefault(qId)
+  if not cb.isNil:
+    cb(providers)
+  else:
+    warn "Unexpected neighbours, probably came too late", node
+
 
 # ---- kademlia proxy ---
 
@@ -510,5 +516,5 @@ proc getProviders*(
     d.sendGetProviders(n, cId)
 
   #TODO: Unique
-  var providers = await d.waitProviders(cId, maxitems, timeout)
-  info "getProviders collected: ", providers
+  result = await d.waitProviders(cId, maxitems, timeout)
+  info "getProviders collected: ", result
