@@ -33,7 +33,7 @@ type
     udpPort*: Port        ## UDP discovery port number
     tcpPort*: Port        ## TCP port number
 
-  ENode* = object
+  ENode* = ref object of RootObj
     ## ENode object
     pubkey*: PublicKey    ## Node public key
     address*: Address     ## Node address
