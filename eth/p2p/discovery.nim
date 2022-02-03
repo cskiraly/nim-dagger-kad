@@ -175,13 +175,9 @@ proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
-proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+proc decodeNodes(neighboursList: Rlp) : seq[Node]
     {.raises: [RlpError, Defect].} =
-  let rlp = rlpFromBytes(payload)
-  let neighboursList = rlp.listElem(0)
   let sz = neighboursList.listLen()
-
-  var neighbours = newSeqOfCap[Node](16)
   for i in 0 ..< sz:
     let n = neighboursList.listElem(i)
     let ipBlob = n.listElem(0).toBytes
@@ -204,7 +200,12 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
       warn "Could not parse public key"
       continue
 
-    neighbours.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
+proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
+    {.raises: [RlpError, Defect].} =
+  trace "<<< neighbours from ", dst = d.thisNode, src = node
+  let rlp = rlpFromBytes(payload)
+  let neighboursList = rlp.listElem(0)
+  let neighbours = decodeNodes(neighboursList)
   d.kademlia.recvNeighbours(node, neighbours)
 
 proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
