@@ -331,7 +331,7 @@ proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   let neighboursList = rlp.listElem(1)
   let providers = decodeNodes(neighboursList)
 
-  warn "recvProviders adding ", this=d.thisNode, providers
+  trace "recvProviders adding ", this=d.thisNode, providers
   let cb = d.providersCallbacks.getOrDefault(qId)
   if not cb.isNil:
     cb(providers)
@@ -566,4 +566,4 @@ proc getProviders*(
     d.sendGetProviders(n, cId)
 
   result = provs.concat(await d.waitProviders(cId, maxitems, timeout)).deduplicate
-  info "getProviders collected: ", result
+  trace "getProviders collected: ", result
