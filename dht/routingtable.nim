@@ -1,5 +1,4 @@
 
-# nim-eth
 # Copyright (c) 2018-2022 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -19,7 +18,7 @@ import
   std/[tables, hashes, times, algorithm, sets, sequtils, random],
   chronos, bearssl, chronicles, stint, nimcrypto/keccak,
   chronos/timer, # needed for doSleep parameter definition timer.Duration
-  ../keys,
+  ../eth/keys,
   ./node
 
 const

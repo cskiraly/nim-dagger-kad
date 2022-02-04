@@ -11,7 +11,7 @@ import
   std/[tables, hashes, times, algorithm, sets, sequtils, random],
   chronos, bearssl, chronicles, stint, nimcrypto/keccak,
   chronos/timer, # needed for doSleep parameter definition timer.Duration
-  ../keys,
+  ../eth/keys,
   ./node,
   ./routingtable,
   ./helpers

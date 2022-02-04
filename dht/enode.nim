@@ -12,7 +12,7 @@
 
 import
   std/[uri, strutils, net],
-  ../keys
+  ../eth/keys
 
 export keys
 

@@ -13,7 +13,7 @@ import
   chronos, stint, nimcrypto/keccak, chronicles, bearssl,
   chronos/timer, # needed for doSleep parameter definition timer.Duration
   stew/[objects, results],
-  ".."/[keys, rlp],
+  "../eth"/[keys, rlp],
   "."/[kademlia, enode, node, helpers]
 
 export

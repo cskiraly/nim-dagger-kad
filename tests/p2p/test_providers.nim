@@ -12,7 +12,7 @@
 import
   std/sequtils,
   chronos, stew/byteutils, nimcrypto, testutils/unittests,
-  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode, node],
+  ../../eth/keys, ../../dht/[discovery, kademlia, enode, node],
   chronicles
 
 proc localAddress(port: int): Address =
