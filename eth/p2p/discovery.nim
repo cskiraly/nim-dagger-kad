@@ -143,7 +143,8 @@ proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
 
 proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, qId: NodeId, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
-  type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
+  type AddressEnc = tuple[ip: IpAddress, udpPort, tcpPort: Port]
+  type Neighbour = tuple[a: AddressEnc, pk: PublicKey]
   var nodes = newSeqOfCap[Neighbour](MAX_NEIGHBOURS_PER_PACKET)
   shallow(nodes)
 
@@ -156,8 +157,8 @@ proc sendNodes(d: DiscoveryProtocol, node: Node, cmdId: CommandId, qId: NodeId, 
       nodes.setLen(0)
 
   for i, n in neighbours:
-    nodes.add((n.node.address.ip, n.node.address.udpPort,
-               n.node.address.tcpPort, n.node.pubkey))
+    nodes.add(((n.node.address.ip, n.node.address.udpPort,
+               n.node.address.tcpPort), n.node.pubkey))
     if nodes.len == MAX_NEIGHBOURS_PER_PACKET:
       flush()
 
@@ -205,32 +206,51 @@ proc recvPong(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
+proc decodeAddress(rlp: Rlp) : Address
+    {.raises: [RlpError, Defect].} =
+  let ipBlob = rlp.listElem(0).toBytes
+  var ip: IpAddress
+  case ipBlob.len
+  of 4:
+    ip = IpAddress(
+      family: IpAddressFamily.IPv4, address_v4: toArray(4, ipBlob))
+  of 16:
+    ip = IpAddress(
+      family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
+  else:
+    error "Wrong ip address length!"
+    #return nil #TODO: we need some optional here
+
+  let udpPort = rlp.listElem(1).toInt(uint16).Port
+  let tcpPort = rlp.listElem(2).toInt(uint16).Port
+
+  return Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)
+
+proc decodePublicKey(rlp: Rlp) : auto
+    {.raises: [RlpError, Defect].} =
+
+  result = PublicKey.fromRaw(rlp.toBytes)
+  if result.isErr:
+    warn "Could not parse public key"
+
+proc decodeNode(rlp: Rlp) : Node
+    {.raises: [RlpError, Defect].} =
+
+    let address = decodeAddress(rlp.listElem(0))
+
+    let pk = decodePublicKey(rlp.listElem(1))
+    if pk.isErr:
+      warn "Could not parse public key"
+      #return nil #TODO: we need some optional here
+
+    return newNode(pk[], address)
+
 proc decodeNodes(neighboursList: Rlp) : seq[Node]
     {.raises: [RlpError, Defect].} =
   let sz = neighboursList.listLen()
   for i in 0 ..< sz:
-    let n = neighboursList.listElem(i)
-    let ipBlob = n.listElem(0).toBytes
-    var ip: IpAddress
-    case ipBlob.len
-    of 4:
-      ip = IpAddress(
-        family: IpAddressFamily.IPv4, address_v4: toArray(4, ipBlob))
-    of 16:
-      ip = IpAddress(
-        family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
-    else:
-      error "Wrong ip address length!"
-      continue
-
-    let udpPort = n.listElem(1).toInt(uint16).Port
-    let tcpPort = n.listElem(2).toInt(uint16).Port
-    let pk = PublicKey.fromRaw(n.listElem(3).toBytes)
-    if pk.isErr:
-      warn "Could not parse public key"
-      continue
-
-    result.add(newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
+    let n = decodeNode(neighboursList.listElem(i))
+    result.add(n)
 
 proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
     {.raises: [RlpError, Defect].} =
