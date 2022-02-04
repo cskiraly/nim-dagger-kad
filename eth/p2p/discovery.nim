@@ -175,14 +175,14 @@ proc sendAddProvider*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
                provider.address.tcpPort, provider.pubkey)
   let payload = rlp.encode((cIdEnc, providerEnc, expiration()))
   let msg = pack(cmdAddProvider, payload, d.privKey)
-  info ">>> add_provider to ", src = d.thisNode, dst, cId
+  trace ">>> add_provider to ", src = d.thisNode, dst, cId
   d.send(dst, msg)
 
 proc sendGetProviders*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
   let cIdEnc = cId.toByteArrayBE()
   let payload = rlp.encode((cIdEnc, expiration()))
   let msg = pack(cmdGetProviders, payload, d.privKey)
-  info ">>> get_providers to ", src = d.thisNode, dst, cId
+  trace ">>> get_providers to ", src = d.thisNode, dst, cId
   d.send(dst, msg)
 
 proc sendProviders*(d: DiscoveryProtocol, node: Node, qId: NodeId, neighbours: seq[Node]) =
@@ -276,7 +276,7 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
 proc recvAddProvider(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
     {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
-  info "<<< add_provider from ", dst = d.thisNode, src = node
+  trace "<<< add_provider from ", dst = d.thisNode, src = node
   let cId = readUintBE[256](rlp.listElem(0).toBytes)
 
   let n = rlp.listElem(1)
@@ -309,17 +309,17 @@ proc recvAddProvider(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
 proc recvGetProviders(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
     {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
-  info "<<< get_providers from ", dst = d.thisNode, src = node
+  trace "<<< get_providers from ", dst = d.thisNode, src = node
   let cId = readUintBE[256](rlp.listElem(0).toBytes)
 
   #TODO: add checks, add signed version
   let provs = d.providers.getOrDefault(cId)
-  info "providers:", provs
+  trace "providers:", provs
   d.sendProviders(node, cId, provs)
 
 proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
     {.raises: [RlpError, Defect].} =
-  info "<<< providers from ", dst = d.thisNode, src = node
+  trace "<<< providers from ", dst = d.thisNode, src = node
 
   let rlp = rlpFromBytes(payload)
   let qId = UInt256.fromBytesBE(rlp.listElem(0).toBytes)
