@@ -27,55 +27,48 @@ proc initDiscoveryNode(privKey: PrivateKey, address: Address,
 
   return node
 
-proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
-  let
-    payloadSeq = @payload
-    signature = @(pk.sign(payload).toRaw())
-    msgHash = keccak256.digest(signature & payloadSeq)
-  result = @(msgHash.data) & signature & payloadSeq
-
-procSuite "Discovery Tests":
+procSuite "Providers Tests":
   let
     bootNodeKey = PrivateKey.fromHex(
       "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
     bootNodeAddr = localAddress(20301)
     bootENode = ENode(pubkey: bootNodeKey.toPublicKey(), address: bootNodeAddr)
     bootNode = initDiscoveryNode(bootNodeKey, bootNodeAddr, @[]) # just a shortcut for new and open
+    rng = keys.newRng()
   waitFor bootNode.bootstrap()  # immediate, since no bootnodes are defined above
 
-  proc discoverNodes(nodecount: int) {.async.} =
-    let
-      rng = keys.newRng()
+  proc bootstrapNodes(nodecount: int) : Future[seq[DiscoveryProtocol]] {.async.} =
 
-    var nodes: seq[DiscoveryProtocol]
     for i in 0..<nodecount:
       let bootnodes = @[bootENode]
       let node = initDiscoveryNode(PrivateKey.random(rng[]), localAddress(20302 + i),
         bootnodes)
-      nodes.add(node)
-    info "---- STARTING BOOSTRAPS ---"
+      result.add(node)
+    debug "---- STARTING BOOSTRAPS ---"
 
-    await allFutures(nodes.mapIt(it.bootstrap())) # this waits for bootstrap based on bootENode, which includes bonding with all its ping pongs
-    nodes.add(bootNode)
+    await allFutures(result.mapIt(it.bootstrap())) # this waits for bootstrap based on bootENode, which includes bonding with all its ping pongs
+    result.insert(bootNode, 0)
 
-    info "---- STARTING CHECKS ---"
-
-    # for i in nodes:
-    #   for j in nodes:
-    #     if j != i:
-    #       check(nodeIdInNodes(i.thisNode.id, j.randomNodes(nodes.len - 1)))
+  asyncTest "Discover nodes UDP":
+    let nodes = await bootstrapNodes(nodecount=2)
+    #TODO: chek why it fails with 1
 
     info "---- STARTING LOOKUP ---"
 
     let targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
     let nodesFound = await nodes[0].kademlia.lookup(targetId)
-    echo "nodes found: ", nodesFound
+    info "nodes found: ", nodesFound
 
-    let addedTo = await nodes[0].addProvider(targetId)
-    echo "Provider added to: ", addedTo
-    let providers = await nodes[1].getProviders(targetId)
-    echo "Providers:", providers
-  
+    info "---- ADDING PROVIDERS ---"
 
-  asyncTest "Discover nodes UDP":
-    await discoverNodes(nodecount=2)
+    let addedTo = await nodes[1].addProvider(targetId)
+    info "Provider added to: ", addedTo
+
+    info "---- STARTING PROVIDERS LOOKUP ---"
+
+    let providers = await nodes[0].getProviders(targetId)
+    info "Providers:", providers
+
+    info "---- STARTING CHECKS ---"
+
+    check (providers.len > 0 and providers[0].id == nodes[1].thisNode.id)
