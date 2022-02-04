@@ -41,6 +41,7 @@ type
     transp: DatagramTransport # uses chronos
     providers*: Table[NodeId, seq[Node]]
     providersCallbacks: Table[NodeId, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
+    refreshLoop: Future[void]
 
   CommandId = enum
     cmdPing = 1
@@ -460,20 +461,33 @@ proc openUdp(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
 proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
   d.openUdp()
 
+proc closeUdp(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
+  d.transp.close()
+
+proc close*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
+  d.closeUdp()
+
+  if not d.refreshLoop.isNil:
+    d.refreshLoop.cancel()
+
 # Bootstrap and its helpers
 
 proc run(d: DiscoveryProtocol) {.async.} =
-  while true:
-    trace "Starting periodic random lookup", d = d.thisNode
-    discard await d.lookupRandom()
-    await sleepAsync(chronos.seconds(3)) # TODO: expose as const
-    trace "Discovered nodes", d = d.thisNode, nodes = d.kademlia.nodesDiscovered
+  try:
+    while true:
+      trace "Starting periodic random lookup", d = d.thisNode
+      discard await d.lookupRandom()
+      await sleepAsync(chronos.seconds(3)) # TODO: expose as const
+      trace "Discovered nodes", d = d.thisNode, nodes = d.kademlia.nodesDiscovered
+
+  except CancelledError:
+    trace "refreshLoop canceled"
 
 proc bootstrap*(d: DiscoveryProtocol) {.async.} =
   trace "kademlia bootstrap start", d = d.thisNode
   await d.kademlia.bootstrap(d.bootstrapNodes)
   trace "kademlia bootstrap finished", d = d.thisNode
-  discard d.run()
+  d.refreshLoop = d.run()
 
 # --- Providers ---
 
