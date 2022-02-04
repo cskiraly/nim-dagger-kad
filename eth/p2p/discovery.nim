@@ -188,7 +188,7 @@ proc sendGetProviders*(d: DiscoveryProtocol, dst: Node, cId: NodeId) =
 proc sendProviders*(d: DiscoveryProtocol, node: Node, qId: NodeId, neighbours: seq[Node]) =
   sendNodes(d, node, cmdProviders, qId, neighbours)
 
-# ---- rlp message decoders ---
+# --- rlp message decoders ---
 
 # --- Wire protocol decoders ---
 # - uses common external format as:  hash | signature | rlp-encoded-data
@@ -317,9 +317,6 @@ proc recvGetProviders(d: DiscoveryProtocol, node: Node, payload: openArray[byte]
   info "providers:", provs
   d.sendProviders(node, cId, provs)
 
-#proc gotProviders*(d: DiscoveryProtocol, remote: Node, neighbours: seq[Node]) =
-
-
 proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
     {.raises: [RlpError, Defect].} =
   info "<<< providers from ", dst = d.thisNode, src = node
@@ -336,8 +333,7 @@ proc recvProviders(d: DiscoveryProtocol, node: Node, payload: seq[byte])
   else:
     warn "Unexpected neighbours, probably came too late", node
 
-
-# ---- kademlia proxy ---
+# --- kademlia proxy ---
 
 proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
   d.kademlia.lookupRandom()
@@ -348,7 +344,7 @@ proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
 proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] =
   d.kademlia.randomNodes(count)
 
-# --- message reception ----
+# --- message reception ---
 
 # Receive and its helpers
 
@@ -394,7 +390,7 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-#exported only for tests
+# exported only for tests
 proc receive*[srcT](d: DiscoveryProtocol, src: srcT, msg: openArray[byte])
     {.raises: [DiscProtocolError, RlpError, ValueError, Defect].} =
   # Receive and if needed create Kademlia Node before passing message up
@@ -460,7 +456,7 @@ proc openUdp(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
 proc open*(d: DiscoveryProtocol) {.raises: [Defect, CatchableError].} =
   d.openUdp()
 
-#Bootstrap and its helpers
+# Bootstrap and its helpers
 
 proc run(d: DiscoveryProtocol) {.async.} =
   while true:
@@ -475,9 +471,8 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
   trace "kademlia bootstrap finished", d = d.thisNode
   discard d.run()
 
+# --- Providers ---
 
-
-#=========== Providers ======
 proc addProvider*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
   result = await d.kademlia.lookup(cId)
   for n in result:
