@@ -534,9 +534,18 @@ proc getProviders*(
   ## For this, we better have a a query ID that is included in all responses.
   ## We collect responses as they come it, and create a conditional waitProviders future that whatches these condotions.
   ## like kademlia.waitNeigbours
+  
+  # What providers do we know about?
+  let provs =
+    if cId in d.providers:
+      d.providers[cId]
+    else:
+      @[]
+  warn "provs:", provs
+
   let nodesNearby = await d.kademlia.lookup(cId)
   for n in nodesNearby:
     d.sendGetProviders(n, cId)
 
-  result = await d.waitProviders(cId, maxitems, timeout)
+  result = provs.concat(await d.waitProviders(cId, maxitems, timeout)).deduplicate
   info "getProviders collected: ", result
