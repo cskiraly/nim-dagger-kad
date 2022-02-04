@@ -394,7 +394,8 @@ proc expirationValid(cmdId: CommandId, rlpEncodedPayload: openArray[byte]):
   else:
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
-proc receive[srcT](d: DiscoveryProtocol, src: srcT, msg: openArray[byte])
+#exported only for tests
+proc receive*[srcT](d: DiscoveryProtocol, src: srcT, msg: openArray[byte])
     {.raises: [DiscProtocolError, RlpError, ValueError, Defect].} =
   # Receive and if needed create Kademlia Node before passing message up
   # Note: export only needed for testing

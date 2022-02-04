@@ -12,7 +12,7 @@
 import
   std/sequtils,
   chronos, stew/byteutils, nimcrypto, testutils/unittests,
-  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode]
+  ../../eth/keys, ../../eth/p2p/[discovery, kademlia, enode, node]
 
 proc localAddress(port: int): Address =
   let port = Port(port)
@@ -125,8 +125,8 @@ procSuite "Discovery Tests":
     let peerKey = PrivateKey.fromHex(
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a619")[]
 
-    let targetNodeId = kademlia.toNodeId(targetKey.toPublicKey)
-    let peerNode = kademlia.newNode(peerKey.toPublicKey, localAddress(20302))
+    let targetNodeId = node.toNodeId(targetKey.toPublicKey)
+    let peerNode = node.newNode(peerKey.toPublicKey, localAddress(20302))
     let nodesSeen = new(HashSet[Node])
 
     # Start `findNode` but don't `await` yet, so the reply can't be processed yet.
