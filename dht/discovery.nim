@@ -10,6 +10,7 @@
 import
   std/times,
   std/tables,
+  std/sequtils,
   chronos, stint, nimcrypto/keccak, chronicles, bearssl,
   chronos/timer, # needed for doSleep parameter definition timer.Duration
   stew/[objects, results],
