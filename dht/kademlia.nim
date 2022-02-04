@@ -140,11 +140,10 @@ proc sortByDistance(nodes: var seq[Node], nodeId: NodeId, maxResults = 0) =
   if maxResults != 0 and nodes.len > maxResults:
     nodes.setLen(maxResults)
 
-proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
+proc lookupRemote*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   ## Lookup performs a network search for nodes close to the given target.
   ## 
-  ## Returns: ordered list of nodes closest to nodeId
-  ## TODO: Should this return our own ID as well in the ordered closest list in case we are close?
+  ## Returns: ordered list of nodes closest to nodeId, excluding its own ID
   ## 
   ## It approaches the target by querying nodes that are closer to it on each iteration.  The
   ## given target does not need to be an actual node identifier.
@@ -181,8 +180,17 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
     sortByDistance(closest, nodeId, BUCKET_SIZE) # TODO: why BUCKET_SIZE here, and not FIND_CONCURRENCY?
     nodesToAsk = excludeIfAsked(closest)
 
-  trace "Kademlia lookup finished", target = nodeId.toHex, closest
+  trace "Kademlia remote lookup finished", target = nodeId.toHex, closest
   result = closest
+
+proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
+  ## Lookup performs a network search for nodes close to the given target.
+  ## 
+  ## Returns: ordered list of nodes closest to nodeId, including its own nodeId if among closest
+  result = await lookupRemote(k, nodeId)
+  result.add(k.thisNode)
+  sortByDistance(result, nodeId, BUCKET_SIZE) # TODO: why BUCKET_SIZE here, and not FIND_CONCURRENCY?
+  trace "Kademlia remote lookup finished", target = nodeId.toHex, result
 
 proc lookupRandom*(k: KademliaProtocol): Future[seq[Node]] =
   # lookup a randomly generated ID
