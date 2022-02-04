@@ -533,6 +533,14 @@ proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: ti
       d.providersCallbacks.del(qId)
       fut.complete(nodes)
 
+proc getProvidersLocal*(
+    d: DiscoveryProtocol,
+    cId: NodeId,
+    maxitems: int = 5,
+  ): seq[Node] {.raises: [KeyError,Defect].}=
+  result = if (cId in d.providers): d.providers[cId] else: @[]
+
+
 proc getProviders*(
     d: DiscoveryProtocol,
     cId: NodeId,
@@ -551,12 +559,7 @@ proc getProviders*(
   ## like kademlia.waitNeigbours
   
   # What providers do we know about?
-  let provs =
-    if cId in d.providers:
-      d.providers[cId]
-    else:
-      @[]
-  warn "provs:", provs
+  let provs = d.getProvidersLocal(cId, maxitems)
 
   let nodesNearby = await d.kademlia.lookup(cId)
   for n in nodesNearby:
