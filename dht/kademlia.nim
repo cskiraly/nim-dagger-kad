@@ -142,9 +142,13 @@ proc sortByDistance(nodes: var seq[Node], nodeId: NodeId, maxResults = 0) =
 
 proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   ## Lookup performs a network search for nodes close to the given target.
-
+  ## 
+  ## Returns: ordered list of nodes closest to nodeId
+  ## TODO: Should this return our own ID as well in the ordered closest list in case we are close?
+  ## 
   ## It approaches the target by querying nodes that are closer to it on each iteration.  The
   ## given target does not need to be an actual node identifier.
+
   var nodesAsked = initHashSet[Node]()
   let nodesSeen = new(HashSet[Node])
 
@@ -154,7 +158,7 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
     sortByDistance(result, nodeId, FIND_CONCURRENCY)
 
   var closest = k.routing.neighbours(nodeId)
-  trace "Starting lookup; initial neighbours: ", closest
+  trace "Starting lookup; initial neighbours: ", closest, target=nodeId
   var nodesToAsk = excludeIfAsked(closest)
   while nodesToAsk.len != 0:
     trace "Node lookup; querying ", nodesToAsk

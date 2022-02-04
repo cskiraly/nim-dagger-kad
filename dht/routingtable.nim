@@ -179,6 +179,9 @@ proc notFullBuckets(r: RoutingTable): seq[KBucket] =
 
 proc neighbours*(r: RoutingTable, id: NodeId, k: int = BUCKET_SIZE): seq[Node] =
   ## Return up to k neighbours of the given node.
+  ## 
+  ## TODO: Are these the closest we know of, or just close enough
+  ## TODO: why do we exclude id? Is there an assumption here?
   result = newSeqOfCap[Node](k * 2)
   for bucket in r.bucketsByDistanceTo(id):
     for n in bucket.nodesByDistanceTo(id):
