@@ -57,58 +57,102 @@ suite "Providers Tests: node alone":
     let
       rng = keys.newRng()
       nodes = await bootstrapNetwork(nodecount=1)
+      targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey)
 
-    asyncTest "Node in isolation should store and retrieve":
+    asyncTest "Node in isolation should store":
 
-      info "---- STARTING LOOKUP ---"
-
-      let targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
-      let nodesFound = await nodes[0].kademlia.lookup(targetId)
-      info "nodes found: ", nodesFound
-
-      info "---- ADDING PROVIDERS ---"
-
+      debug "---- ADDING PROVIDERS ---"
       let addedTo = await nodes[0].addProvider(targetId)
-      info "Provider added to: ", addedTo
+      debug "Provider added to: ", addedTo
 
-      info "---- STARTING PROVIDERS LOOKUP ---"
+      debug "---- STARTING CHECKS ---"
+      check (addedTo.len == 1)
+      check (addedTo[0].id == nodes[0].thisNode.id)
+      check (nodes[0].getProvidersLocal(targetId)[0].id == nodes[0].thisNode.id)
 
+    asyncTest "Node in isolation should retrieve":
+
+      debug "---- STARTING PROVIDERS LOOKUP ---"
       let providers = await nodes[0].getProviders(targetId)
-      info "Providers:", providers
+      debug "Providers:", providers
 
-      info "---- STARTING CHECKS ---"
-
+      debug "---- STARTING CHECKS ---"
       check (providers.len > 0 and providers[0].id == nodes[0].thisNode.id)
 
-    nodes[0].close()
+    asyncTest "Should not retrieve bogus":
+
+      let bogusId = toNodeId(PrivateKey.random(rng[]).toPublicKey)
+ 
+      debug "---- STARTING PROVIDERS LOOKUP ---"
+      let providers = await nodes[0].getProviders(bogusId)
+      debug "Providers:", providers
+
+      debug "---- STARTING CHECKS ---"
+      check (providers.len == 0)
+
+    for n in nodes:
+      n.close()
     await sleepAsync(chronos.seconds(3))
 
   asyncTest "Providers Tests: two nodes":
     let
       rng = keys.newRng()
       nodes = await bootstrapNetwork(nodecount=2)
+      targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
 
-    asyncTest "2 nodes, store and retieve":
+    asyncTest "2 nodes, store and retieve from same":
 
-      info "---- STARTING LOOKUP ---"
-
-      let targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
-      let nodesFound = await nodes[0].kademlia.lookup(targetId)
-      info "nodes found: ", nodesFound
-
-      info "---- ADDING PROVIDERS ---"
-
+      debug "---- ADDING PROVIDERS ---"
       let addedTo = await nodes[0].addProvider(targetId)
-      info "Provider added to: ", addedTo
+      debug "Provider added to: ", addedTo
 
-      info "---- STARTING PROVIDERS LOOKUP ---"
-
+      debug "---- STARTING PROVIDERS LOOKUP ---"
       let providers = await nodes[0].getProviders(targetId)
-      info "Providers:", providers
+      debug "Providers:", providers
 
-      info "---- STARTING CHECKS ---"
+      debug "---- STARTING CHECKS ---"
+      check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
 
-      check (providers.len > 0 and providers[0].id == nodes[0].thisNode.id)
+    asyncTest "2 nodes, retieve from other":
+      debug "---- STARTING PROVIDERS LOOKUP ---"
+      let providers = await nodes[1].getProviders(targetId)
+      debug "Providers:", providers
 
-    nodes[0].close
-    nodes[1].close
+      debug "---- STARTING CHECKS ---"
+      check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
+
+    for n in nodes:
+      n.close()
+    await sleepAsync(chronos.seconds(3))
+
+  asyncTest "Providers Tests: 100 nodes":
+    let
+      rng = keys.newRng()
+      nodes = await bootstrapNetwork(nodecount=100)
+      targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
+
+    asyncTest "100 nodes, store and retieve from same":
+
+      debug "---- ADDING PROVIDERS ---"
+      let addedTo = await nodes[0].addProvider(targetId)
+      debug "Provider added to: ", addedTo
+
+      debug "---- STARTING PROVIDERS LOOKUP ---"
+      let providers = await nodes[0].getProviders(targetId)
+      debug "Providers:", providers
+
+      debug "---- STARTING CHECKS ---"
+      check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
+
+    asyncTest "100 nodes, retieve from other":
+      debug "---- STARTING PROVIDERS LOOKUP ---"
+      let providers = await nodes[99].getProviders(targetId)
+      debug "Providers:", providers
+
+      debug "---- STARTING CHECKS ---"
+      check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
+
+    for n in nodes:
+      n.close()
+
+      
