@@ -69,7 +69,7 @@ procSuite "Discovery Tests":
 
     let targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
     let nodesFound = await nodes[0].kademlia.lookup(targetId)
-    echo "nodes found: ", nodesFound.deduplicate()
+    echo "nodes found: ", nodesFound
 
     let addedTo = await nodes[0].addProvider(targetId)
     echo "Provider added to: ", addedTo
