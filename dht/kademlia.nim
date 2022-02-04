@@ -204,6 +204,9 @@ proc lookupRandom*(k: KademliaProtocol): Future[seq[Node]] =
   k.lookup(id)
 
 proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =
+  ## resolve node based on NodeId
+  ## Returns: Node with given NodeId, or nil
+  ## Note: works on own address as well
   let closest = await k.lookup(id)
   for n in closest:
     if n.id == id: return n
