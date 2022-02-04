@@ -273,6 +273,9 @@ proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
   else:
     trace "Invalid target public key received"
 
+proc addProviderLocal(d: DiscoveryProtocol, cId: NodeId, prov: Node) = 
+  d.providers.mgetOrPut(cId, @[]).add(prov)
+
 proc recvAddProvider(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
     {.raises: [RlpError, Defect].} =
   let rlp = rlpFromBytes(payload)
@@ -302,7 +305,7 @@ proc recvAddProvider(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
 
   #TODO: add checks, add signed version
   let prov = newNode(pk[], Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort))
-  d.providers.mgetOrPut(cId, @[]).add(prov)
+  d.addProviderLocal(cId, prov)
 
   #TODO: check that CID is reasonably close to our NodeID
 
@@ -476,7 +479,10 @@ proc bootstrap*(d: DiscoveryProtocol) {.async.} =
 proc addProvider*(d: DiscoveryProtocol, cId: NodeId): Future[seq[Node]] {.async.} =
   result = await d.kademlia.lookup(cId)
   for n in result:
-    d.sendAddProvider(n, cId)
+    if n != d.thisNode:
+      d.sendAddProvider(n, cId)
+    else:
+      d.addProviderLocal(cId, d.thisNode)
 
 proc waitProviders(d: DiscoveryProtocol, qId: NodeId, maxitems: int, timeout: timer.Duration):
     Future[seq[Node]] {.raises: [Defect].} =
