@@ -27,7 +27,7 @@ const
   ID_SIZE = 256
 
 type
-  RoutingTable* = object #TODO: check if better ref
+  RoutingTable* = ref object #TODO: check if better ref
     thisNode: Node
     buckets: seq[KBucket]
 
@@ -36,6 +36,10 @@ type
     nodes: seq[Node]
     replacementCache: seq[Node]
     lastUpdated: float # epochTime
+
+proc newRoutingTable*(): RoutingTable =
+  result.new()
+  result.buckets = @[]
 
 proc newKBucket(istart, iend: NodeId): KBucket =
   result.new()

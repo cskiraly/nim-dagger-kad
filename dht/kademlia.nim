@@ -54,6 +54,7 @@ proc newKademliaProtocol*[Wire](
   result.new()
   result.thisNode = thisNode
   result.wire = wire
+  result.routing=newRoutingTable()
   result.routing.init(thisNode)
   result.rng = rng
   result.bond = newBondProtocol(thisNode, wire, result.routing)
