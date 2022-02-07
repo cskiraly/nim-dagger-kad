@@ -258,9 +258,10 @@ proc recvNeighbours(d: DiscoveryProtocol, node: Node, payload: seq[byte])
     {.raises: [RlpError, Defect].} =
   trace "<<< neighbours from ", dst = d.thisNode, src = node
   let rlp = rlpFromBytes(payload)
+  let qId = UInt256.fromBytesBE(rlp.listElem(0).toBytes)
   let neighboursList = rlp.listElem(1)
   let neighbours = decodeNodes(neighboursList)
-  d.kademlia.recvNeighbours(node, neighbours)
+  d.kademlia.recvNeighbours(node, qId, neighbours)
 
 proc recvFindNode(d: DiscoveryProtocol, node: Node, payload: openArray[byte])
     {.raises: [RlpError, ValueError, Defect].} =

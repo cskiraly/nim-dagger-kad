@@ -30,12 +30,17 @@ logScope:
   topics = "kademlia"
 
 type
+  # Previous implementation allowed only one lookup flying between
+  # two peers. This can be too limiting. Generalize findNode ID in
+  # and use the tuple(TagetId, Node) as query ID.
+  neighboursCallbacksId = (NodeId, Node)
+
   KademliaProtocol* [Wire] = ref object
     wire: Wire
     thisNode: Node
     routing: RoutingTable
     bond: BondProtocol[Wire]
-    neighboursCallbacks: Table[Node, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
+    neighboursCallbacks: Table[neighboursCallbacksId, proc(n: seq[Node]) {.gcsafe, raises: [Defect].}]
     rng: ref BrHmacDrbgContext
 
 const
@@ -59,13 +64,13 @@ proc newKademliaProtocol*[Wire](
   result.rng = rng
   result.bond = newBondProtocol(thisNode, wire, result.routing)
 
-proc waitNeighbours(k: KademliaProtocol, remote: Node):
+proc waitNeighbours(k: KademliaProtocol, remote: Node, nodeId: NodeId):
     Future[seq[Node]] {.raises: [Defect].} =
-  doAssert(remote notin k.neighboursCallbacks)
+  doAssert((nodeId, remote) notin k.neighboursCallbacks)
   result = newFuture[seq[Node]]("waitNeighbours")
   let fut = result
   var neighbours = newSeqOfCap[Node](BUCKET_SIZE)
-  k.neighboursCallbacks[remote] = proc(n: seq[Node]) {.gcsafe, raises: [Defect].} =
+  k.neighboursCallbacks[(nodeId, remote)] = proc(n: seq[Node]) {.gcsafe, raises: [Defect].} =
     # This callback is expected to be called multiple times because nodes usually
     # split the neighbours replies into multiple packets, so we only complete the
     # future event.set() we've received enough neighbours.
@@ -74,13 +79,13 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node):
       if i != k.thisNode:
         neighbours.add(i)
         if neighbours.len == BUCKET_SIZE:
-          k.neighboursCallbacks.del(remote)
+          k.neighboursCallbacks.del((nodeId, remote))
           doAssert(not fut.finished)
           fut.complete(neighbours)
 
   onTimeout(REQUEST_TIMEOUT):
     if not fut.finished:
-      k.neighboursCallbacks.del(remote)
+      k.neighboursCallbacks.del((nodeId, remote))
       fut.complete(neighbours)
 
 # Exported for test.
@@ -88,7 +93,7 @@ proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
                nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
   # used in lookup only
   # sends a (1-hop) findNode, waits responses and bonds to them, finally sends back bonded ones
-  if remote in k.neighboursCallbacks:
+  if (nodeId, remote) in k.neighboursCallbacks:
     # Sometimes findNode is called while another findNode is already in flight.
     # It's a bug when this happens, and the logic should probably be fixed
     # elsewhere.  However, this small fix has been tested and proven adequate.
@@ -96,7 +101,7 @@ proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
     result = newSeq[Node]()
     return
   k.wire.sendFindNode(remote, nodeId)
-  var candidates = await k.waitNeighbours(remote)
+  var candidates = await k.waitNeighbours(remote, nodeId)
   if candidates.len == 0:
     trace "Got no candidates from peer, returning", peer = remote
     result = candidates
@@ -250,7 +255,7 @@ proc recvPing*(k: KademliaProtocol, n: Node, msgHash: any)
     {.raises: [ValueError, Defect].} =
   k.bond.recvPing(n, msgHash)
 
-proc recvNeighbours*(k: KademliaProtocol, remote: Node, neighbours: seq[Node]) =
+proc recvNeighbours*(k: KademliaProtocol, remote: Node, qId: NodeId, neighbours: seq[Node]) =
   ## Process a neighbours response.
   ##
   ## Neighbours responses should only be received as a reply to a find_node, and that is only
@@ -258,7 +263,7 @@ proc recvNeighbours*(k: KademliaProtocol, remote: Node, neighbours: seq[Node]) =
   ## neighbours_callbacks, which is added (and removed after it's done or timed out) in
   ## wait_neighbours().
   trace "Received neighbours", remote, neighbours
-  let cb = k.neighboursCallbacks.getOrDefault(remote)
+  let cb = k.neighboursCallbacks.getOrDefault((qId, remote))
   if not cb.isNil:
     cb(neighbours)
   else:
