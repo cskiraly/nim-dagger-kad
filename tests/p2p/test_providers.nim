@@ -153,5 +153,16 @@ suite "Providers Tests: node alone":
       debug "---- STARTING CHECKS ---"
       check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
 
+    asyncTest "20 nodes, retieve after bootnode dies":
+      debug "---- KILLING BOOTSTRAP NODE ---"
+      nodes[0].close
+
+      debug "---- STARTING PROVIDERS LOOKUP ---"
+      let providers = await nodes[^2].getProviders(targetId)
+      debug "Providers:", providers
+
+      debug "---- STARTING CHECKS ---"
+      check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
+
     for n in nodes:
       n.close()
