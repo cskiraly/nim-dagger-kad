@@ -125,13 +125,14 @@ suite "Providers Tests: node alone":
       n.close()
     await sleepAsync(chronos.seconds(3))
 
-  asyncTest "Providers Tests: 100 nodes":
+  asyncTest "Providers Tests: 20 nodes":
     let
       rng = keys.newRng()
-      nodes = await bootstrapNetwork(nodecount=100)
+      nodes = await bootstrapNetwork(nodecount=20)
       targetId = toNodeId(PrivateKey.random(rng[]).toPublicKey) 
+    await sleepAsync(chronos.seconds(30))
 
-    asyncTest "100 nodes, store and retieve from same":
+    asyncTest "20 nodes, store and retieve from same":
 
       debug "---- ADDING PROVIDERS ---"
       let addedTo = await nodes[0].addProvider(targetId)
@@ -144,9 +145,9 @@ suite "Providers Tests: node alone":
       debug "---- STARTING CHECKS ---"
       check (providers.len == 1 and providers[0].id == nodes[0].thisNode.id)
 
-    asyncTest "100 nodes, retieve from other":
+    asyncTest "20 nodes, retieve from other":
       debug "---- STARTING PROVIDERS LOOKUP ---"
-      let providers = await nodes[99].getProviders(targetId)
+      let providers = await nodes[^1].getProviders(targetId)
       debug "Providers:", providers
 
       debug "---- STARTING CHECKS ---"
@@ -154,5 +155,3 @@ suite "Providers Tests: node alone":
 
     for n in nodes:
       n.close()
-
-      
